@@ -82,6 +82,42 @@ func createTask(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func listTasks(w http.ResponseWriter, r *http.Request) {
+	
+	rows, err := db.Query("SELECT id, title, status FROM task")
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var t Task
+	tasks := []Task{}
+
+	for rows.Next() {
+		err := rows.Scan(&t.ID, &t.Title, &t.Status)
+		if err != nil {
+			log.Println(err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
+		tasks = append(tasks, t)
+	}
+
+	if err := rows.Err(); err != nil {
+		log.Println(err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	
+	w.Header().Set("Content-Type", "application/json")
+
+	if err := json.NewEncoder(w).Encode(tasks); err != nil {
+		log.Println(err)
+	}
+}
+
 func main() {
 	cfg := mysql.NewConfig()
 	cfg.DBName = "taskmanagement"
@@ -105,6 +141,7 @@ func main() {
 	fmt.Println("Success")
 
 	http.HandleFunc("POST /tasks", createTask)
+	http.HandleFunc("GET /tasks", listTasks)
 
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
