@@ -11,10 +11,15 @@ import (
 	"strings"
 	"unicode/utf8"
 	"errors"
+	"strconv"
 )
 
 type CreateTaskRequest struct {
 	Title string `json:"title"`
+}
+
+type UpdateTaskRequest struct {
+	Status string `json:"status"`
 }
 
 type Task struct {
@@ -118,6 +123,31 @@ func listTasks(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func updateTask(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+
+	id, err := strconv.Atoi(idStr)
+	if err != nil || id < 1 {
+		http.Error(w, "id is not a number or a negative", http.StatusBadRequest)
+		return
+	}
+
+	var req UpdateTaskRequest
+
+	err = json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	if req.Status != "todo" && req.Status != "in_progress" && req.Status != "done"{
+		http.Error(w, "Invalid status", http.StatusBadRequest)
+		return
+	}
+
+	fmt.Fprintln(w, "checks passed for id", id)
+}
+
 func main() {
 	cfg := mysql.NewConfig()
 	cfg.DBName = "taskmanagement"
@@ -142,6 +172,7 @@ func main() {
 
 	http.HandleFunc("POST /tasks", createTask)
 	http.HandleFunc("GET /tasks", listTasks)
+	http.HandleFunc("PATCH /tasks/{id}", updateTask)
 
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
