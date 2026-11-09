@@ -1,20 +1,26 @@
 package main
 
 import (
-	"fmt"
-	"os"
-	"github.com/go-sql-driver/mysql"
 	"database/sql"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"log"
 	"net/http"
-	"encoding/json"
+	"os"
+	"strconv"
 	"strings"
 	"unicode/utf8"
-	"errors"
+
+	"github.com/go-sql-driver/mysql"
 )
 
 type CreateTaskRequest struct {
 	Title string `json:"title"`
+}
+
+type UpdateTaskRequest struct {
+	Status string `json:"status"`
 }
 
 type Task struct {
@@ -118,6 +124,67 @@ func listTasks(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func updateTask(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+
+	id, err := strconv.Atoi(idStr)
+	if err != nil || id < 1 {
+		http.Error(w, "id is not a number or a negative", http.StatusBadRequest)
+		return
+	}
+
+	var req UpdateTaskRequest
+
+	err = json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	if req.Status != "todo" && req.Status != "in_progress" && req.Status != "done"{
+		http.Error(w, "Invalid status", http.StatusBadRequest)
+		return
+	}
+
+	var t Task
+
+	err = db.QueryRow("SELECT id, title, status FROM task WHERE id = ?", id).Scan(&t.ID, &t.Title, &t.Status)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.Error(w, "data not found", http.StatusNotFound)
+			return
+		}
+
+		log.Println(err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	if req.Status == t.Status {
+		w.Header().Set("Content-Type", "application/json")
+
+		if err := json.NewEncoder(w).Encode(t); err != nil {
+			log.Println(err)
+		}
+		return
+	}
+
+	_, err = db.Exec("UPDATE task SET status = ? WHERE id = ?", req.Status, id)
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	t.Status = req.Status
+	
+	w.Header().Set("Content-Type", "application/json")
+
+	if err := json.NewEncoder(w).Encode(t); err != nil {
+		log.Println(err)
+	}
+}
+
 func main() {
 	cfg := mysql.NewConfig()
 	cfg.DBName = "taskmanagement"
@@ -142,6 +209,7 @@ func main() {
 
 	http.HandleFunc("POST /tasks", createTask)
 	http.HandleFunc("GET /tasks", listTasks)
+	http.HandleFunc("PATCH /tasks/{id}", updateTask)
 
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
