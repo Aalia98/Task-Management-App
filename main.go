@@ -155,6 +155,10 @@ func updateTask(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Invalid title", http.StatusBadRequest)
 			return
 		}
+		if utf8.RuneCountInString(title) > 500 {
+			http.Error(w, "Title must be at most 500 characters", http.StatusBadRequest)
+			return
+		}
 	}
 
 	if req.Status != nil {
