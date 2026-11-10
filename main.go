@@ -185,6 +185,37 @@ func updateTask(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func deleteTask(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+
+	id, err := strconv.Atoi(idStr)
+	if err != nil || id < 1 {
+		http.Error(w, "id must be a positive number", http.StatusBadRequest)
+		return
+	}
+
+	result, err := db.Exec("DELETE FROM task WHERE id = ?", id)
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	count, err := result.RowsAffected()
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	if count == 0 {
+		http.Error(w, "data not found", http.StatusNotFound)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func main() {
 	cfg := mysql.NewConfig()
 	cfg.DBName = "taskmanagement"
@@ -210,6 +241,7 @@ func main() {
 	http.HandleFunc("POST /tasks", createTask)
 	http.HandleFunc("GET /tasks", listTasks)
 	http.HandleFunc("PATCH /tasks/{id}", updateTask)
+	http.HandleFunc("DELETE /tasks/{id}", deleteTask)
 
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
