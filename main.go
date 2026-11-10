@@ -20,12 +20,13 @@ type CreateTaskRequest struct {
 }
 
 type UpdateTaskRequest struct {
-	Status string `json:"status"`
+	Title  *string `json:"title"`
+	Status *string `json:"status"`
 }
 
 type Task struct {
-	ID int `json:"id"`
-	Title string `json:"title"`
+	ID     int    `json:"id"`
+	Title  string `json:"title"`
 	Status string `json:"status"`
 }
 
@@ -59,7 +60,7 @@ func createTask(w http.ResponseWriter, r *http.Request) {
 
 		if errors.As(err, &mysqlErr) && mysqlErr.Number == 1062 {
 			http.Error(w, "Task already exists", http.StatusConflict)
-			return 
+			return
 		}
 
 		log.Println(err)
@@ -69,14 +70,14 @@ func createTask(w http.ResponseWriter, r *http.Request) {
 
 	id, err := result.LastInsertId()
 	if err != nil {
-		log.Println(err )
+		log.Println(err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
 
-	task := Task {
-		ID: int(id),
-		Title: title,
+	task := Task{
+		ID:     int(id),
+		Title:  title,
 		Status: "todo",
 	}
 
@@ -89,7 +90,7 @@ func createTask(w http.ResponseWriter, r *http.Request) {
 }
 
 func listTasks(w http.ResponseWriter, r *http.Request) {
-	
+
 	rows, err := db.Query("SELECT id, title, status FROM task")
 	if err != nil {
 		log.Println(err)
@@ -116,7 +117,7 @@ func listTasks(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
 
 	if err := json.NewEncoder(w).Encode(tasks); err != nil {
@@ -141,9 +142,26 @@ func updateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Status != "todo" && req.Status != "in_progress" && req.Status != "done"{
-		http.Error(w, "Invalid status", http.StatusBadRequest)
+	if req.Title == nil && req.Status == nil {
+		http.Error(w, "title or status required", http.StatusBadRequest)
 		return
+	}
+
+	var title string
+
+	if req.Title != nil {
+		title = strings.TrimSpace(*req.Title)
+		if title == "" {
+			http.Error(w, "Invalid title", http.StatusBadRequest)
+			return
+		}
+	}
+
+	if req.Status != nil {
+		if *req.Status != "todo" && *req.Status != "in_progress" && *req.Status != "done" {
+			http.Error(w, "Invalid status", http.StatusBadRequest)
+			return
+		}
 	}
 
 	var t Task
@@ -160,7 +178,18 @@ func updateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Status == t.Status {
+	newTitle := t.Title
+	newStatus := t.Status
+
+	if req.Title != nil {
+		newTitle = title
+	}
+
+	if req.Status != nil {
+		newStatus = *req.Status
+	}
+
+	if newTitle == t.Title && newStatus == t.Status {
 		w.Header().Set("Content-Type", "application/json")
 
 		if err := json.NewEncoder(w).Encode(t); err != nil {
@@ -169,15 +198,25 @@ func updateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = db.Exec("UPDATE task SET status = ? WHERE id = ?", req.Status, id)
+	titleKey := strings.ToLower(newTitle)
+
+	_, err = db.Exec("UPDATE task SET title = ?, title_key = ?, status = ? WHERE id = ?", newTitle, titleKey, newStatus, id)
 	if err != nil {
+		var mysqlErr *mysql.MySQLError
+
+		if errors.As(err, &mysqlErr) && mysqlErr.Number == 1062 {
+			http.Error(w, "Task already exists", http.StatusConflict)
+			return
+		}
+
 		log.Println(err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
 
-	t.Status = req.Status
-	
+	t.Title = newTitle
+	t.Status = newStatus
+
 	w.Header().Set("Content-Type", "application/json")
 
 	if err := json.NewEncoder(w).Encode(t); err != nil {
