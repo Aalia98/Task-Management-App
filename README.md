@@ -160,7 +160,7 @@ Behavior:
 - All supplied fields are validated before the database update.
 - Title changes also update `title_key`, preserving duplicate detection.
 - Sending the same values for an existing task returns `200` with the unchanged task.
-- Unlike POST, the current PATCH handler does not enforce a 500-rune title limit. Database constraints may still reject a title.
+- PATCH also rejects titles longer than 500 characters with `400 Title must be at most 500 characters`.
 
 Errors:
 
@@ -170,6 +170,7 @@ Errors:
 | 400 | Invalid JSON: `Invalid JSON` |
 | 400 | No non-null update fields: `title or status required` |
 | 400 | Empty/whitespace-only title: `Invalid title` |
+| 400 | Title longer than 500 characters: `Title must be at most 500 characters` |
 | 400 | Unsupported status: `Invalid status` |
 | 404 | Valid input, but task not found: `data not found` |
 | 409 | Duplicate title key: `Task already exists` |
